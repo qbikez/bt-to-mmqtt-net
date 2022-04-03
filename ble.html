@@ -1,0 +1,430 @@
+
+<!DOCTYPE html>
+<html>
+  <head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>Advertising v1.2</title>
+	<link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+	<div style="height: auto; width: auto; text-align: center;">
+	<h1>Web Experimental Features!</h1>
+ 	#enable-experimental-web-platform-features may be needed to read MAC (copy link:
+  	<a href=chrome://flags/#enable-experimental-web-platform-features>Chrome<a>,
+ 	<a href=opera://flags/#enable-experimental-web-platform-features>Opera<a>,
+  	<a href=edge://flags/#enable-experimental-web-platform-features>Edge<a>)
+	<br><br>
+	<input type="button" id="butConnect" onclick="onButtonClick();" value="Select an advertising device">
+	</div><hr>
+	<div id="log"></div>
+  </body>
+<script type="text/javascript">
+// https://googlechrome.github.io/samples/web-bluetooth/watch-advertisements-async-await.html
+function log(data) {
+    var time = new Date().toLocaleTimeString();
+    var logString = time + ": " + data;
+    document.getElementById("log").innerHTML += logString + "<br>";
+}
+function onButtonClick() {
+  var deviceOptions = { optionalServices: [0xfe95, 0x181a, 0x181c, 0x181e, 0xfdcd, 0xfff9, 0x1f11, 0x2aeb] };
+  deviceOptions.filters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz_#@!*';,.<>{}[]"
+	.split("").map((x) => ({namePrefix:x}));
+  log('Requesting Bluetooth Scan...');
+  navigator.bluetooth.requestDevice(deviceOptions).then(device => {
+    log('> Requested ' + device.name);
+    device.addEventListener('advertisementreceived', (event) => {
+    dir(event);
+      log('Device Name: ' + event.device.name + ', RSSI: ' + event.rssi);
+      event.serviceData.forEach((valueDataView, key) => {
+        logDataView('ServiceData', key, valueDataView);
+      });
+    });
+    log('Watching advertisements from "' + device.name + '"...');
+    return device.watchAdvertisements();  
+  })
+  .catch(error => {
+    log('Argh! ' + error);
+  });
+}
+/* Utils */
+function hex(number, len) {
+	var str = (number.toString(16)).toUpperCase();
+	while (str.length < len) str = '0' + str;
+	return str;
+}
+const tabid2name = [
+  { id: 0x01AA, name: "LYWSDCGQ"},
+  { id: 0x045B, name: "LYWSD02"},
+  { id: 0x055B, name: "LYWSD03MMC"},
+  { id: 0x1203, name: "XMWSDJ04MMC"},
+  { id: 0x04E1, name: "XMMF01JQD"},
+  { id: 0x0098, name: "HHCCJCY01"},
+  { id: 0x03BC, name: "GCLS002"},
+  { id: 0x015D, name: "HHCCPOT002"},
+  { id: 0x040A, name: "WX08ZM"},
+  { id: 0x098B, name: "MCCGQ02HL"},
+  { id: 0x0083, name: "YM-K1501"},
+  { id: 0x0113, name: "YM-K1501EU"},
+  { id: 0x045C, name: "V-SK152"},
+  { id: 0x0863, name: "SJWS01LM"},
+  { id: 0x07F6, name: "MJYD02YL"},
+  { id: 0x03DD, name: "MUE4094RT"},
+  { id: 0x0A8D, name: "RTCGQ02LM"},
+  { id: 0x00DB, name: "MMC-T201-1"},
+  { id: 0x0489, name: "M1S-T500"},
+  { id: 0x0C3C, name: "CGC1"},
+  { id: 0x0576, name: "CGD1"},
+  { id: 0x066F, name: "CGDK2"},
+  { id: 0x0347, name: "CGG1"},
+  { id: 0x0B48, name: "CGG1-ENCRYPTED"},
+  { id: 0x03D6, name: "CGH1"},
+  { id: 0x0A83, name: "CGPR1"},
+  { id: 0x06d3, name: "MHO-C303"},
+  { id: 0x0387, name: "MHO-C401"},
+  { id: 0x02DF, name: "JQJCY01YM"},
+  { id: 0x0997, name: "JTYJGD03MI"},
+  { id: 0x1568, name: "K9B-1BTN"},
+  { id: 0x1569, name: "K9B-2BTN"},
+  { id: 0x0DFD, name: "K9B-3BTN"},
+  { id: 0x07BF, name: "YLAI003"},
+  { id: 0x0153, name: "YLYK01YL"},
+  { id: 0x068E, name: "YLYK01YL-FANCL"},
+  { id: 0x04E6, name: "YLYK01YL-VENFAN"},
+  { id: 0x03BF, name: "YLYB01YL-BHFRC"},
+  { id: 0x03B6, name: "YLKG07YL/YLKG08YL"},
+  { id: 0x069E, name: "ZNMS16LM"},
+  { id: 0x069F, name: "ZNMS17LM"},
+  { id: 0x04E9, name: "MJZNMSQ01YD"},
+  { id: 0x098C, name: "XMZNMST02YD"}
+];
+function id2name(dev_id) {
+	let did = tabid2name.map(el => el.id); 
+	let i = did.indexOf(dev_id);
+	if(i != -1) return tabid2name[i].name;
+	return "?";
+}
+const tabDoor2event = [
+  { id: 0, name: "opened"},
+  { id: 1, name: "closed"},
+  { id: 2, name: "closing timeout"},
+  { id: 3, name: "device reset"}
+];
+function Door2event(id) {
+	let did = tabDoor2event.map(el => el.id); 
+	let i = did.indexOf(id);
+	if(i != -1) return tabDoor2event[i].name;
+	return "?";
+}
+const tabHaBle2name = [             
+  { id: 0, name: "PacketId", unit: "", factor: 1},
+  { id: 1, name: "battery", unit: "%", factor: 1},
+  { id: 2, name: "temperature", unit: "°C", factor: 0.01},
+  { id: 3, name: "humidity", unit: "%", factor: 0.01},
+  { id: 4, name: "pressure", unit: "hPa", factor: 0.01},
+  { id: 5, name: "illuminance", unit: "lux", factor: 0.01},
+  { id: 6, name: "weight", unit: "kg", factor: 0.01},
+  { id: 7, name: "weight", unit: "kg", factor: 1},
+  { id: 8, name: "dewpoint", unit: "°C", factor: 0.01},
+  { id: 9, name: "count", unit: "", factor: 1},
+  { id: 10, name: "energy", unit: "kWh", factor: 0.001},
+  { id: 11, name: "power", unit: "W", factor: 0.01},
+  { id: 12, name: "voltage", unit: "V", factor: 0.001},
+  { id: 13, name: "pm2x5", unit: "kg/m3", factor: 1},
+  { id: 14, name: "pm10", unit: "kg/m3", factor: 1},
+  { id: 15, name: "boolean", unit: "", factor: 1},
+  { id: 16, name: "switch", unit: "", factor: 1},
+  { id: 17, name: "opened", unit: "", factor: 1}
+];
+
+const logDataView = (labelOfDataSource, key, b) => {
+	let s = '', h = '0123456789ABCDEF';
+	let buf = new Uint8Array(b.buffer);
+	buf.forEach((v) => { s += h[v >> 4] + h[v & 15]; });
+	log(` ${labelOfDataSource} Data: ` + key + ', ' + s);
+	if(key == '0000fe95-0000-1000-8000-00805f9b34fb') { // mi
+		if(b.byteLength >= 2) { // custom mi
+			let ctrl = b.getUint16(0, true);
+			let s = 'MiVer'+ (ctrl>>12);
+			let i = 2;
+			if((ctrl&0xf000) >= 0x2000 && b.byteLength >= i + 3) {
+				let dev_id = b.getUint16(i, true);
+				let frcntr = b.getUint8(i+2);
+				i += 3;
+				s += ', DevID: 0x'+ hex(dev_id, 4);
+				s += "-" + id2name(dev_id);
+				s += ', FnCnt: '+ frcntr;
+				s += ', CtrID: 0x'+ hex(ctrl, 4);
+				if(ctrl & 0x100)
+					s +=' Registered and bound';
+				else
+					s +=' Not bound';
+				if(ctrl & 0x200)
+					s +=', Request APP to register and bind';
+				switch((ctrl>>10)&3) {
+					case 0:
+						s +=', Old version certification';
+						break;
+					case 1:
+						s +=', Safety certification';
+						break;
+					case 2:
+						s +=', Standard certification';
+						break;
+					//case 3:
+					//	s +=' reserved';
+					//	break;
+				}
+				if(ctrl & 0x200)
+					s +=', Request APP to register and bind';
+				if((ctrl & 0x10) && b.byteLength >= i + 6) {
+					s += ', MAC: '+hex(buf[i+5],2)+hex(buf[i+4],2)+hex(buf[i+3],2)+hex(buf[i+2],2)+hex(buf[i+1],2)+hex(buf[i],2);
+					i += 6;
+				}
+				if((ctrl & 0x20) && b.byteLength >= i + 1) {
+					let cap = b.getUint8(i);
+					i += 1;
+					s +=', Capability: 0x'+ hex(cap,2);
+					switch((cap>>3) & 3) {
+						case 0:
+							s +=' - no binding';
+							break;							
+						case 1:
+							s +=' - front binding';
+							break;							
+						case 2:
+							s +=' - back binding';
+							break;							
+						case 3:
+							s +=' - Combo';
+							break;							
+					}
+					if(cap & 0x20 && b.byteLength >= i + 2) {
+						s +=', IO: 0x'+ hex(b.getUint16(i, true), 4);
+						i += 2;
+					}
+				}
+				if((ctrl & 0x40)) {
+					if(b.byteLength >= i + 4) {
+						if(ctrl & 8) {
+							s += ', Data encrypted';
+						} else {
+							let data_id = b.getUint16(i, true);
+							let data_len = b.getUint8(i+2);
+							i += 3;
+							if(b.byteLength >= i + data_len) switch(data_id) {
+								case 0x1006:
+									if(data_len == 2) {
+										let humi = b.getInt16(i, true) / 10.0;
+										s += ', Humi: '+humi+'%';
+									}
+									break;
+								case 0x1004:
+									if(data_len == 2) {
+										let temp = b.getInt16(i, true) / 10.0;
+										s += ', Temp: '+temp+'°C';
+									}
+									break;
+								case 0x100a:
+									if(data_len == 1) {
+										s += ', Bat: '+ b.getUint8(i) + '%';
+									}
+									break;
+								case 0x100d:
+									if(data_len == 4 && b.byteLength >= i + 3) {
+										let temp = b.getInt16(i, true) / 10.0;
+										let humi = b.getInt16(i+2, true) / 10.0;
+										s += ', Temp: '+temp+'°C Humi: '+humi+'%';
+									}
+									break;
+								case 0x1019:
+									if(data_len == 1) {
+										s += ', Door: '+ Door2event(b.getUint8(i));
+									}
+									break;
+								default:
+									s += ', DataID: 0x'+hex(data_id,4);
+									let data_value = 0;
+									if(data_len == 1)
+										s += ' Value: 0x'+hex(b.getUint8(i),2);
+									else if(data_len == 2)
+										s += ' Value: 0x'+hex(b.getUint16(i, true),4);
+									else if(data_len == 4)
+										s += ' Value: 0x'+hex(b.getUint32(i, true), 8);
+									else 
+										s += ' DataLen: ' + data_len;
+									break;
+							}
+							i += data_len;
+						}
+					}
+				}
+				if(ctrl & 0x80)
+					s +=', Mesh Data';
+				log(s);
+			}
+		}
+	} else if(key == '0000181a-0000-1000-8000-00805f9b34fb') {
+		if(b.byteLength >= 15) { // pvvx
+			// 70 58 56 38 C1 A4 69 0A 60 09 25 0B 48 70 04
+			let temp = b.getInt16(6, true) / 100.0;
+			let humi = b.getInt16(8, true) / 100.0;
+			let vbat = b.getUint16(10, true);
+			let bat = b.getUint8(12);
+			let cnt = b.getUint8(13);
+			let flg = b.getUint8(14);
+			let s = 'MAC: '+hex(buf[5],2)+hex(buf[4],2)+hex(buf[3],2)+hex(buf[2],2)+hex(buf[1],2)+hex(buf[0],2);
+			s += ', Bat: '+bat+'%, Vbat: '+vbat+' mV , Temp: '+temp+'°C, Humi: '+humi+'%, Count: '+cnt+', Flg: '+flg;
+			log(s); }
+		else if(b.byteLength == 13) { // atc1441
+			// A4 C1 38 56 58 70 01 0A 18 48 0B 25 70
+			let temp = b.getInt16(6, false) / 10.0;
+			let humi = b.getUint8(8);
+			let bat = b.getUint8(9);
+			let vbat = b.getUint16(10, false);
+			let cnt = b.getUint8(12);
+			let s = 'MAC: '+hex(buf[0],2)+hex(buf[1],2)+hex(buf[2],2)+hex(buf[3],2)+hex(buf[4],2)+hex(buf[5],2);
+			s += ', Bat: '+bat+'%, Vbat: '+vbat+' mV, Temp: '+temp+'°C, Humi: '+humi+'%, Count: '+cnt;
+			log(s); }
+	} else if(key == '0000fff9-0000-1000-8000-00805f9b34fb') { // Qingping / ClearGrass CGG1 "Goose"
+		// 0801 AE1610342D58 0104 1401 4601 02 01 58 
+		if(b.byteLength >= 16 && b.getUint16(0, true) == 0x0108 && b.getUint16(8, true) == 0x0401 && b.getUint16(14, true) == 0x0102) {
+			let temp = b.getInt16(10, true) / 10.0;
+			let humi = b.getInt16(12, true) / 10.0;
+			let bat = b.getUint8(16);
+			let s = 'MAC: '+hex(buf[2],2)+hex(buf[3],2)+hex(buf[4],2)+hex(buf[5],2)+hex(buf[6],2)+hex(buf[7],2);
+			s += ', Bat: '+bat+'%, Temp: '+temp+'°C, Humi: '+humi+'%';
+			log(s); 
+		}
+	} else if(key == '0000fdcd-0000-1000-8000-00805f9b34fb') {  // Qingping / ClearGrass
+		// CGPR1 0812 005E60342D58 0201 64 0F01 72 0904 08000000
+		// 	 0812 005E60342D58 0201 64 0F01 6E 0904 91140000
+		// 	 4812 005E60342D58 0804 01 911400 0F01 6F
+		//       4812 005E60342D58 1101 01 0F01 85
+		//	 4812 005E60342D58 1101 00 0F01 8C
+		let msg_length = b.byteLength;
+		if(msg_length >= 11 && (b.getUint8(0)&0x3f) == 0x08) {
+			let device_id = b.getUint8(1);
+			let s = 'MAC: '+hex(buf[2],2)+hex(buf[3],2)+hex(buf[4],2)+hex(buf[5],2)+hex(buf[6],2)+hex(buf[7],2);
+			if(device_id == 0x01) s+=' CGG1 "Goose"';
+			else if (device_id == 0x07) s+=' CGG1';
+			else if (device_id == 0x09) s+=' CGP1W';
+			else if (device_id == 0x0C) s+=' CGD1';
+			else if (device_id == 0x12) s+=' CGPR1';
+			//if((b.getUint8(0)&0x40)!=0) s+=', Event';
+			let xdata_point = 10;
+		        while (xdata_point < msg_length) {
+				let xdata_id = b.getUint8(xdata_point-2);
+				let xdata_size = b.getUint8(xdata_point-1);
+				if(xdata_point + xdata_size <= msg_length) {
+				 if((xdata_id == 0x01)&&(xdata_size == 4)) {
+					let temp = b.getInt16(xdata_point, true) / 10.0;
+					let humi = b.getInt16(xdata_point+2, true) / 10.0;
+					s += ', Temp: '+temp+'°C, Humi: '+humi+'%';
+				 } else if((xdata_id == 0x02)&&(xdata_size == 1)) {
+					s += ', Bat: '+b.getUint8(xdata_point)+'%';
+				 } else if((xdata_id == 0x07)&&(xdata_size == 2)) {
+					s += ', Pressure: '+(b.getInt16(xdata_point, true) / 100.0);
+				 } else if((xdata_id == 0x08)&&(xdata_size == 4)) {
+					s += ', Motion: '+ b.getUint8(xdata_point)+' & Light: '+(b.getUint16(xdata_point+1, true)+b.getUint8(xdata_point+3)*256);
+				 } else if((xdata_id == 0x09)&&(xdata_size == 4)) {
+					s += ', Light: '+(b.getUint32(xdata_point, true));
+				 } else if((xdata_id == 0x0F)&&(xdata_size == 1)) {
+					s += ', Count: '+b.getUint8(xdata_point);
+				 } else if((xdata_id == 0x11)&&(xdata_size == 1)) {
+					if(b.getUint8(xdata_point) == 0) s += ', Light Off';
+					else s += ', Light On';
+				 } else if (xdata_size == 1) {
+					s += ', id: 0x'+hex(xdata_id,2)+' - data: 0x'+hex(buf[xdata_point],2);
+				 } else if (xdata_size == 2) {
+					s += ', id: 0x'+hex(xdata_id,2)+' - data: 0x'+hex(buf[xdata_point],2)+hex(buf[xdata_point+1],2);
+				 } else if (xdata_size == 4) {
+					s += ', id: 0x'+hex(xdata_id,2)+' - data: 0x'+hex(buf[xdata_point],2)+hex(buf[xdata_point+1],2)+hex(buf[xdata_point+2],2)+hex(buf[xdata_point+3],2);
+				 }
+				} else break;
+				xdata_point = xdata_point + xdata_size + 2; 
+			}
+			log(s); 
+		}
+	} else if(key == '00001f11-0000-1000-8000-00805f9b34fb') {  // AdScanerTrg
+		if(b.byteLength > 10) {
+			let temp = b.getInt16(0, true) / 100.0; // temp 
+			let humi = b.getInt16(2, true)  / 100.0; // humi
+			let lumi = b.getInt16(4, true); // light
+			let mtimer = b.getUint16(6, true)
+			let motion = b.getUint8(8);
+			let jlight = b.getUint8(9);
+			let flg = b.getUint8(10);
+			let s = ("AdScanerTrg# Temp: "+temp.toFixed(2)+
+			", Humi: "+humi.toFixed(2)+
+			", Lumi: " +lumi.toFixed(0)+
+			", MTimer: " +mtimer+
+			", HiMotion: " +motion+
+			", JLight: "+jlight+
+			", Flg: 0x"+hex(flg,2)+
+			" # ReedSwitchOut: "+(flg&1)+
+			", TempHumiOut: "+((flg>>1)&1)+
+			", LightMotionOut: "+((flg>>2)&1)+
+			", TempEvent: "+((flg>>3)&1)+
+			", HumiEvent: "+((flg>>4)&1)+
+			", LightEvent: "+((flg>>5)&1));
+			log(s); 
+		}
+	} else if(key == '00002aeb-0000-1000-8000-00805f9b34fb') {  // Count24
+		if(b.byteLength > 2) {
+			let cnt = (b.getUint16(0, false)<<8) | b.getUint8(2);
+			log("Event - Count 24 bits: " + cnt); 
+		}
+	} else if(key == '0000181e-0000-1000-8000-00805f9b34fb') {  // HA BLE
+		log("HA-BLE, Data encrypted"); 
+	} else if(key == '0000181c-0000-1000-8000-00805f9b34fb') {  // HA BLE
+		if(b.byteLength > 1) {
+			let s = "HA-BLE";
+			let len = b.byteLength;
+			let i = 0;
+			while(i < len) {
+				let sl = b.getUint8(i)&31; // size
+				if(i+sl+1 > len) break;
+				let st = b.getUint8(i)>>5;
+				if(sl > 0) {
+					let dd = b.getUint8(i+1);
+					let value = 0;
+					let did = tabHaBle2name.map(el => el.id); 
+					let e = did.indexOf(dd);
+					let f = 1;
+					if(e != -1) f = tabHaBle2name[e].factor;
+					if(st == 0) {
+						if(sl == 2)
+							value = b.getUint8(i+2);
+						else if(sl == 3)
+							value = b.getUint16(i+2, true);
+						else if(sl == 4)
+							value = b.getUint16(i+2, true) + (b.getUint8(i+4)<<16);
+						else if(sl == 5)
+							value = b.getUint32(i+2, true);
+						if(f != 1) 	value = (value*f).toFixed(3);
+					} else if(st == 1) {
+						if(sl == 2)
+							value = b.getInt8(i+2);
+						else if(sl == 3)
+							value = b.getInt16(i+2, true);
+						else if(sl == 4) {
+							value = b.getUnt16(i+2, true) + (b.getUint8(i+4)<<16);
+							if(value >= 0x800000)
+								value = 0x1000000 - value;
+						} else if(sl == 5)
+							value = b.getInt32(i+2, true);
+						if(f != 1) 	value = (value*f).toFixed(3);
+					} else 
+						value = "?";
+					if(e != -1) {
+						s += ', '+tabHaBle2name[e].name+': '+value+tabHaBle2name[e].unit;
+					} else 				
+						s += ', '+st+'?: '+value;
+				}
+				i += sl+1;
+			}
+			log(s); 
+		}
+	}
+};
+</script>
+</html>
