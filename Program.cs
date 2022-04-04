@@ -33,16 +33,16 @@ class Program
     static void Main(string[] args)
     {
 
-        StartAdvertisementWatcher();
-        StartBleDeviceWatcher();
+        var advWatcher = CreateAdvertisementWatcher();
+        var devWatcher = CreateDeviceWatcher();
 
-
-
+        advWatcher.Start();
+        devWatcher.Start();
 
         Console.ReadLine();
     }
 
-    private static void StartAdvertisementWatcher()
+    private static BluetoothLEAdvertisementWatcher CreateAdvertisementWatcher()
     {
         var watcher = new BluetoothLEAdvertisementWatcher();
         // watcher.SignalStrengthFilter.InRangeThresholdInDBm = -70;
@@ -56,20 +56,24 @@ class Program
             Task.Run(async () =>
             {
                 var dev = await BluetoothLEDevice.FromBluetoothAddressAsync(eventArgs.BluetoothAddress, eventArgs.BluetoothAddressType);
-                if (!devices.ContainsKey(dev.DeviceId))
+                if (dev == null) return;
+                lock (devices)
                 {
-                    devices.Add(dev.DeviceId, new Device()
+                    if (!devices.ContainsKey(dev.DeviceId))
                     {
-                        Advert = eventArgs
-                    });
-                }
-                else
-                {
-                    devices[dev.DeviceId].Advert = eventArgs;
+                        devices.Add(dev.DeviceId, new Device()
+                        {
+                            Advert = eventArgs
+                        });
+                    }
+                    else
+                    {
+                        devices[dev.DeviceId].Advert = eventArgs;
+                    }
                 }
 
                 var mitemp = ParseAdvert(eventArgs.Advertisement);
-                devices[dev.DeviceId].MiTemp = mitemp;
+                if (mitemp != null) devices[dev.DeviceId].MiTemp = mitemp;
 
                 PrintDevice(dev.DeviceId, devices[dev.DeviceId]);
             });
@@ -83,7 +87,7 @@ class Program
             System.Console.WriteLine(e.Error);
         };
 
-        watcher.Start();
+        return watcher;
     }
 
     private static MiTemp? ParseAdvert(BluetoothLEAdvertisement advertisement)
@@ -133,7 +137,7 @@ class Program
         dev.PairingStatus = result.ToString();
     }
 
-    private static void StartBleDeviceWatcher()
+    private static DeviceWatcher CreateDeviceWatcher()
     {
         // Additional properties we would like about the device.
         // Property strings are documented here https://msdn.microsoft.com/en-us/library/windows/desktop/ff521659(v=vs.85).aspx
@@ -153,23 +157,26 @@ class Program
         {
             //Console.WriteLine($"Added: {info.Id} {info.Name} {JsonConvert.SerializeObject(info)}");
 
-            if (!devices.ContainsKey(info.Id))
+            lock (devices)
             {
-                var dev = new Device()
+                if (!devices.ContainsKey(info.Id))
                 {
-                    IsAlive = true,
-                    Info = info
-                };
-                if (!string.IsNullOrEmpty(info.Name))
-                {
-                    devices.Add(info.Id, dev);
-                    //Task.Run(() => Pair(dev));
-                    //PrintDevices(advertOnly: true);
+                    var dev = new Device()
+                    {
+                        IsAlive = true,
+                        Info = info
+                    };
+                    if (!string.IsNullOrEmpty(info.Name))
+                    {
+                        devices.Add(info.Id, dev);
+                        //Task.Run(() => Pair(dev));
+                        //PrintDevices(advertOnly: true);
+                    }
                 }
-            }
-            else
-            {
-                devices[info.Id].Info = info;
+                else
+                {
+                    devices[info.Id].Info = info;
+                }
             }
         };
         deviceWatcher.Updated += (w, info) =>
@@ -195,7 +202,7 @@ class Program
             Console.WriteLine("Enumeration completed");
         };
 
-        deviceWatcher.Start();
+        return deviceWatcher;
     }
 
 
@@ -215,7 +222,7 @@ class Program
         System.Console.WriteLine($"{id} {dev?.Info?.Name} isPaired: {dev?.Info?.Pairing?.IsPaired} advert: {AsString(dev?.Advert)}");
         if (dev?.MiTemp != null)
         {
-            System.Console.WriteLine($"temp: {dev.MiTemp.Temperature} hum: {dev.MiTemp.Humidity} bat: {dev.MiTemp.BatteryPercent}% ({dev.MiTemp.BatteryMv}mV)");
+            System.Console.WriteLine($"[{dev.Info.Name}] temp: {dev.MiTemp.Temperature} hum: {dev.MiTemp.Humidity} bat: {dev.MiTemp.BatteryPercent}% ({dev.MiTemp.BatteryMv}mV)");
         }
     }
 
