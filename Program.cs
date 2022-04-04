@@ -36,9 +36,11 @@ class Program
     private static void StartAdvertisementWatcher()
     {
         var watcher = new BluetoothLEAdvertisementWatcher();
-        watcher.SignalStrengthFilter.InRangeThresholdInDBm = -70;
-        watcher.SignalStrengthFilter.OutOfRangeThresholdInDBm = -75;
-        watcher.SignalStrengthFilter.OutOfRangeTimeout = TimeSpan.FromMilliseconds(2000);
+        // watcher.SignalStrengthFilter.InRangeThresholdInDBm = -70;
+        // watcher.SignalStrengthFilter.OutOfRangeThresholdInDBm = -75;
+        // watcher.SignalStrengthFilter.OutOfRangeTimeout = TimeSpan.FromMilliseconds(2000);
+        watcher.AllowExtendedAdvertisements = true;
+        watcher.ScanningMode = BluetoothLEScanningMode.Active;
 
         watcher.Received += (w, eventArgs) =>
         {
@@ -51,61 +53,24 @@ class Program
                     {
                         Advert = eventArgs
                     });
-                    PrintDevices(advertOnly: true);
                 }
                 else
                 {
                     devices[dev.DeviceId].Advert = eventArgs;
-                    PrintDevices(advertOnly: true);
                 }
 
-                AsString(eventArgs.Advertisement.DataSections);
-
-                var manufacturerSection = eventArgs.Advertisement.ManufacturerData;
-                AsString(manufacturerSection);
+                PrintDevice(dev.DeviceId, devices[dev.DeviceId]);
             });
             //Console.WriteLine(JsonConvert.SerializeObject(eventArgs));
             //Console.WriteLine($"ADV data: {dataString}");
             //Console.WriteLine($"ADV manufacturer data: {manufacturerDataString}");
         };
+        watcher.Stopped += (w, e) => {
+            System.Console.WriteLine("WATCHER IS DEAD:");
+            System.Console.WriteLine(e.Error);
+        };
 
         watcher.Start();
-    }
-
-    private static string AsString(IList<BluetoothLEManufacturerData> manufacturerSection)
-    {
-        string manufacturerDataString = "";
-        foreach (var section in manufacturerSection)
-        {
-            // Only print the first one of the list
-            var data = new byte[section.Data.Length];
-            using (var reader = DataReader.FromBuffer(section.Data))
-            {
-                reader.ReadBytes(data);
-            }
-            // Print the company ID + the raw data in hex format
-            manufacturerDataString += $"{section.CompanyId}: {BitConverter.ToString(data)} | ";
-        }
-
-        return manufacturerDataString;
-    }
-
-    private static string AsString(IList<BluetoothLEAdvertisementDataSection> dataSection)
-    {
-        string dataString = "";
-        foreach (var section in dataSection)
-        {
-            // Only print the first one of the list
-            var data = new byte[section.Data.Length];
-            using (var reader = DataReader.FromBuffer(section.Data))
-            {
-                reader.ReadBytes(data);
-            }
-            // Print the company ID + the raw data in hex format
-            dataString += $"{section.DataType}: {BitConverter.ToString(data)} | ";
-        }
-
-        return dataString;
     }
 
     private static async Task Pair(Device dev)
@@ -148,11 +113,13 @@ class Program
                 {
                     devices.Add(info.Id, dev);
                     //Task.Run(() => Pair(dev));
-                    PrintDevices(advertOnly: true);
+                    //PrintDevices(advertOnly: true);
                 }
             }
-
-            devices[info.Id].Info = info;
+            else
+            {
+                devices[info.Id].Info = info;
+            }
         };
         deviceWatcher.Updated += (w, info) =>
         {
@@ -180,6 +147,29 @@ class Program
         deviceWatcher.Start();
     }
 
+
+    private static void PrintDevices(bool advertOnly)
+    {
+        System.Console.WriteLine("== DEVICES: ==");
+        foreach (var dev in devices)
+        {
+            if (advertOnly && dev.Value.Advert == null) continue;
+            PrintDevice(dev.Key, dev.Value);
+        }
+        System.Console.WriteLine("==============");
+    }
+
+    private static void PrintDevice(string id, Device? dev)
+    {
+        System.Console.WriteLine($"{id} {dev?.Info?.Name} isPaired: {dev?.Info?.Pairing?.IsPaired} advert: {AsString(dev?.Advert)}");
+    }
+
+    private static string AsString(BluetoothLEAdvertisementReceivedEventArgs? advert)
+    {
+        
+        return $"[{string.Join(",", advert.Advertisement.ServiceUuids)}]" + AsString(advert.Advertisement.DataSections) + " manufacturer: " + AsString(advert.Advertisement.ManufacturerData);
+    }
+
     private static string AsString(IReadOnlyDictionary<string, object> properties)
     {
         var sb = new StringBuilder();
@@ -192,19 +182,39 @@ class Program
         return sb.ToString();
     }
 
-    private static void PrintDevices(bool advertOnly)
+    private static string AsString(IList<BluetoothLEManufacturerData> manufacturerSection)
     {
-        System.Console.WriteLine("== DEVICES: ==");
-        foreach (var dev in devices)
+        string manufacturerDataString = "";
+        foreach (var section in manufacturerSection)
         {
-            if (advertOnly && dev.Value.Advert == null) continue;
-            System.Console.WriteLine($"{dev.Key} {dev.Value?.Info?.Name} isPaired: {dev.Value?.Info?.Pairing?.IsPaired} advert: {AsString(dev.Value.Advert)}");
+            // Only print the first one of the list
+            var data = new byte[section.Data.Length];
+            using (var reader = DataReader.FromBuffer(section.Data))
+            {
+                reader.ReadBytes(data);
+            }
+            // Print the company ID + the raw data in hex format
+            manufacturerDataString += $"{section.CompanyId}: {BitConverter.ToString(data)} | ";
         }
-        System.Console.WriteLine("==============");
+
+        return manufacturerDataString;
     }
 
-    private static string AsString(BluetoothLEAdvertisementReceivedEventArgs? advert)
+    private static string AsString(IList<BluetoothLEAdvertisementDataSection> dataSection)
     {
-        return AsString(advert.Advertisement.DataSections);
+        string dataString = "";
+        foreach (var section in dataSection)
+        {
+            // Only print the first one of the list
+            var data = new byte[section.Data.Length];
+            using (var reader = DataReader.FromBuffer(section.Data))
+            {
+                reader.ReadBytes(data);
+            }
+            // Print the company ID + the raw data in hex format
+            dataString += $"{section.DataType}: {BitConverter.ToString(data)} | ";
+        }
+
+        return dataString;
     }
 }

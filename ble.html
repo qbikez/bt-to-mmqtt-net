@@ -30,9 +30,9 @@ function onButtonClick() {
 	.split("").map((x) => ({namePrefix:x}));
   log('Requesting Bluetooth Scan...');
   navigator.bluetooth.requestDevice(deviceOptions).then(device => {
-    log('> Requested ' + device.name);
+    log('> Requesteddevice ' + device.name);
     device.addEventListener('advertisementreceived', (event) => {
-    dir(event);
+    console.dir(event);
       log('Device Name: ' + event.device.name + ', RSSI: ' + event.rssi);
       event.serviceData.forEach((valueDataView, key) => {
         logDataView('ServiceData', key, valueDataView);
