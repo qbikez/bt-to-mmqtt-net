@@ -15,6 +15,15 @@ class Device
     public DateTime LastSeen { get; set; }
     public bool IsAlive { get; set; }
     public string PairingStatus { get; set; }
+    public MiTemp? MiTemp { get; set; }
+}
+
+class MiTemp
+{
+    public decimal Temperature { get; set; }
+    public decimal Humidity { get; set; }
+    public decimal BatteryPercent { get; set; }
+    public decimal BatteryMv { get; set; }
 }
 
 class Program
@@ -59,18 +68,60 @@ class Program
                     devices[dev.DeviceId].Advert = eventArgs;
                 }
 
+                var mitemp = ParseAdvert(eventArgs.Advertisement);
+                devices[dev.DeviceId].MiTemp = mitemp;
+
                 PrintDevice(dev.DeviceId, devices[dev.DeviceId]);
             });
             //Console.WriteLine(JsonConvert.SerializeObject(eventArgs));
             //Console.WriteLine($"ADV data: {dataString}");
             //Console.WriteLine($"ADV manufacturer data: {manufacturerDataString}");
         };
-        watcher.Stopped += (w, e) => {
+        watcher.Stopped += (w, e) =>
+        {
             System.Console.WriteLine("WATCHER IS DEAD:");
             System.Console.WriteLine(e.Error);
         };
 
         watcher.Start();
+    }
+
+    private static MiTemp? ParseAdvert(BluetoothLEAdvertisement advertisement)
+    {
+        var sections = advertisement.DataSections;
+        foreach (var section in sections)
+        {
+            if (section.DataType == 22)
+            {
+                var data = new byte[section.Data.Length];
+                using var reader = DataReader.FromBuffer(section.Data);
+                reader.ReadBytes(data);
+
+                if (data.Length >= 17 && data[0] == 0x1A && data[1] == 0x18)
+                {
+                    var dataStr = BitConverter.ToString(data);
+                    // custom pvvx format
+                    var tempInt = (data[9] << 8) | data[10];
+                    var temp = (decimal)tempInt / 100;
+
+                    var humInt = (data[11] << 8) | data[12];
+                    var hum = (decimal)humInt / 100;
+
+                    var batMv = data[13];
+                    var batLvl = data[14];
+
+                    return new MiTemp()
+                    {
+                        BatteryMv = batMv,
+                        BatteryPercent = batLvl,
+                        Humidity = hum,
+                        Temperature = temp
+                    };
+                };
+            }
+        }
+
+        return null;
     }
 
     private static async Task Pair(Device dev)
@@ -162,11 +213,15 @@ class Program
     private static void PrintDevice(string id, Device? dev)
     {
         System.Console.WriteLine($"{id} {dev?.Info?.Name} isPaired: {dev?.Info?.Pairing?.IsPaired} advert: {AsString(dev?.Advert)}");
+        if (dev?.MiTemp != null)
+        {
+            System.Console.WriteLine($"temp: {dev.MiTemp.Temperature} hum: {dev.MiTemp.Humidity} bat: {dev.MiTemp.BatteryPercent}% ({dev.MiTemp.BatteryMv}mV)");
+        }
     }
 
     private static string AsString(BluetoothLEAdvertisementReceivedEventArgs? advert)
     {
-        
+
         return $"[{string.Join(",", advert.Advertisement.ServiceUuids)}]" + AsString(advert.Advertisement.DataSections) + " manufacturer: " + AsString(advert.Advertisement.ManufacturerData);
     }
 
