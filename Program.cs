@@ -1,7 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using MQTTnet;
+using MQTTnet.Client;
+using MQTTnet.Client.Options;
 using Newtonsoft.Json;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Advertisement;
@@ -28,12 +33,41 @@ class MiTemp
 
 class Program
 {
+    const string topic_prefix = "ble";
+    const string discovery_topic = "homeassistant/discovery";
+    const string global_topic_prefix = "";
+
+
+    const string SENSOR = "sensor";
+    const string CLIMATE = "climate";
+    const string BINARY_SENSOR = "binary_sensor";
+    const string COVER = "cover";
+    const string SWITCH = "switch";
+
     static Dictionary<string, Device> devices = new Dictionary<string, Device>();
 
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
+        var mqtt = await ConnectMqtt();
 
-        var advWatcher = CreateAdvertisementWatcher();
+        var advWatcher = CreateAdvertisementWatcher((dev, eventArgs) =>
+        {
+            lock (devices)
+            {
+                if (!devices.ContainsKey(dev.DeviceId))
+                {
+                    devices.Add(dev.DeviceId, new Device());
+                }
+
+                devices[dev.DeviceId].Advert = eventArgs;
+            }
+
+            var mitemp = ParseAdvert(eventArgs.Advertisement);
+            if (mitemp != null) devices[dev.DeviceId].MiTemp = mitemp;
+
+            PrintDevice(dev.DeviceId, devices[dev.DeviceId]);
+            ForwardToMqtt(mqtt, dev.DeviceId, devices[dev.DeviceId]);
+        });
         var devWatcher = CreateDeviceWatcher();
 
         advWatcher.Start();
@@ -42,7 +76,120 @@ class Program
         Console.ReadLine();
     }
 
-    private static BluetoothLEAdvertisementWatcher CreateAdvertisementWatcher()
+    private static async Task<IMqttClient> ConnectMqtt()
+    {
+        var host = "localhost";
+        System.Console.WriteLine($"connecting to mqtt at {host}...");
+        var mqtt = new MqttFactory().CreateMqttClient();
+
+        var mqttClientOptions = new MqttClientOptionsBuilder()
+            .WithTcpServer(host)
+            .Build();
+
+        await mqtt.ConnectAsync(mqttClientOptions, CancellationToken.None);
+
+        System.Console.WriteLine("mqtt connected");
+        return mqtt;
+    }
+
+    private static async Task BroadcastDevice(IMqttClient mqttClient, Device device)
+    {
+        var mac = device.Info.Id.Replace("BluetoothLE#BluetoothLE", "");
+        var name = device.Info.Name;
+
+        var deviceInfo = new
+        {
+            identifiers = new string[] { mac, format_discovery_id(mac, name) },
+            manufacturer = "Xiaomi",
+            model = "Mijia Lywsd03Mmc",
+            name = device.Info.Name,
+        };
+
+        var monitoredAttrs = new[] { "temperature", "humidity", "battery" };
+        foreach (var attr in monitoredAttrs)
+        {
+            var payload = new
+            {
+                unique_id = format_discovery_id(mac, name, attr),
+                state_topic = format_prefixed_topic(name, attr),
+                name = format_discovery_name(name, attr),
+                force_update = "true",
+                device = deviceInfo,
+            };
+
+            var topic = $"{discovery_topic}/{SENSOR}/{format_discovery_subtopic(mac, name, attr)}/config";
+
+            await SendMessage(mqttClient, topic, payload);
+        }
+    }
+
+
+    private static string format_discovery_name(params string[] attrs)
+        => string.Join("_", attrs);
+
+    private static string format_topic(params string[] attrs)
+        => $"{topic_prefix}/{string.Join("/", attrs)}";
+    private static string format_prefixed_topic(params string[] attrs)
+    {
+        var topic = format_topic(attrs);
+        return string.IsNullOrEmpty(global_topic_prefix) ? topic : $"{global_topic_prefix}/{topic}";
+    }
+
+    private static string format_discovery_id(string mac, string name, string? attr = null)
+        => $"bt-mqtt-gateway/{format_discovery_subtopic(mac, name, attr)}";
+
+    private static string format_discovery_subtopic(string mac, string name, params string?[] attrs)
+    {
+        var node_id = name + "_" + mac.Replace(":", "-");
+        var object_id = string.Join("_", attrs.Where(a => a != null));
+        return $"{node_id}/{object_id}";
+    }
+
+
+
+    private static async Task ForwardToMqtt(IMqttClient mqttClient, string deviceId, Device device)
+    {
+        if (device.MiTemp == null) return;
+
+        await BroadcastDevice(mqttClient, device);
+
+        var monitoredAttrs = new[] { "temperature", "humidity", "battery" };
+        var name = device.Info.Name;
+
+        foreach (var attr in monitoredAttrs)
+        {
+            var topic = format_prefixed_topic(name, attr);
+            object attrValue = "_";
+
+            switch(attr) {
+                case "temperature": 
+                    attrValue = device.MiTemp.Temperature;
+                    break;
+                case "humidity": 
+                    attrValue = device.MiTemp.Humidity;
+                    break;
+                case "battery": 
+                    attrValue = device.MiTemp.BatteryPercent;
+                    break;
+                default: 
+                    break;
+            }
+
+            await SendMessage(mqttClient, topic, attrValue);
+        }
+    }
+
+    private static async Task SendMessage(IMqttClient client, string topic, object payload)
+    {
+        var applicationMessage = new MqttApplicationMessageBuilder()
+            .WithTopic(topic)
+            .WithPayload(JsonConvert.SerializeObject(payload))
+            .Build();
+
+        await client.PublishAsync(applicationMessage, CancellationToken.None);
+    }
+
+    private static BluetoothLEAdvertisementWatcher CreateAdvertisementWatcher(Action<BluetoothLEDevice, BluetoothLEAdvertisementReceivedEventArgs> handleAdvertisement)
     {
         var watcher = new BluetoothLEAdvertisementWatcher();
         // watcher.SignalStrengthFilter.InRangeThresholdInDBm = -70;
@@ -57,25 +204,8 @@ class Program
             {
                 var dev = await BluetoothLEDevice.FromBluetoothAddressAsync(eventArgs.BluetoothAddress, eventArgs.BluetoothAddressType);
                 if (dev == null) return;
-                lock (devices)
-                {
-                    if (!devices.ContainsKey(dev.DeviceId))
-                    {
-                        devices.Add(dev.DeviceId, new Device()
-                        {
-                            Advert = eventArgs
-                        });
-                    }
-                    else
-                    {
-                        devices[dev.DeviceId].Advert = eventArgs;
-                    }
-                }
 
-                var mitemp = ParseAdvert(eventArgs.Advertisement);
-                if (mitemp != null) devices[dev.DeviceId].MiTemp = mitemp;
-
-                PrintDevice(dev.DeviceId, devices[dev.DeviceId]);
+                handleAdvertisement(dev, eventArgs);
             });
             //Console.WriteLine(JsonConvert.SerializeObject(eventArgs));
             //Console.WriteLine($"ADV data: {dataString}");
