@@ -48,7 +48,43 @@ class Program
 
     static async Task Main(string[] args)
     {
-        var mqtt = await ConnectMqtt();
+        while (true)
+        {
+            try
+            {
+                await WatchBLE();
+                System.Console.WriteLine("watcher exited. did something disconnect?");
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine($"Exception caught: {ex.Message}");
+            }
+            var delay = 3000;
+            System.Console.WriteLine($"waiting for {delay}ms sbefore retrying");
+            await Task.Delay(ms);
+            System.Console.WriteLine("retry");
+        }
+    }
+
+    static async Task WatchBLE()
+    {
+        AutoResetEvent watchReset = new AutoResetEvent(false);
+
+        using var mqtt = await ConnectMqtt();
+        mqtt.UseDisconnectedHandler(d =>
+        {
+            try
+            {
+                System.Console.WriteLine("MQTT Disconnected");
+                System.Console.WriteLine(d.Reason);
+                System.Console.WriteLine(d.Exception?.Message);
+                watchReset.Set();
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine("error:", ex);
+            }
+        });
 
         var advWatcher = CreateAdvertisementWatcher((dev, eventArgs) =>
         {
@@ -68,12 +104,57 @@ class Program
             PrintDevice(dev.DeviceId, devices[dev.DeviceId]);
             ForwardToMqtt(mqtt, dev.DeviceId, devices[dev.DeviceId]);
         });
+        advWatcher.Stopped += (w, e) =>
+        {
+            System.Console.WriteLine("ADV WATCHER IS DEAD:");
+            System.Console.WriteLine(e.Error);
+            watchReset.Set();
+        };
+
         var devWatcher = CreateDeviceWatcher();
+        devWatcher.Stopped += (w, e) =>
+        {
+            System.Console.WriteLine("DEV WATCHER IS DEAD:");
+            System.Console.WriteLine(e);
+            watchReset.Set();
+        };
 
         advWatcher.Start();
         devWatcher.Start();
 
-        Console.ReadLine();
+        watchReset.WaitOne();
+
+        System.Console.WriteLine("WATCH RESET!");
+
+        try
+        {
+            System.Console.WriteLine("stopping adv watcher");
+            advWatcher.Stop();
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"Exception when stopping advwatcher: {ex.Message}");
+        }
+
+        try
+        {
+            System.Console.WriteLine("stopping dev watcher");
+            devWatcher.Stop();
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"Exception when stopping devwatcher: {ex.Message}");
+        }
+
+        try
+        {
+            System.Console.WriteLine("disconnecting mqtt");
+            await mqtt.DisconnectAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"Exception when disconnecting mqtt: {ex.Message}");
+        }
     }
 
     private static async Task<IMqttClient> ConnectMqtt()
@@ -86,7 +167,7 @@ class Program
             .WithTcpServer(host)
             .Build();
 
-        await mqtt.ConnectAsync(mqttClientOptions, CancellationToken.None);
+        var connResult = await mqtt.ConnectAsync(mqttClientOptions, CancellationToken.None);
 
         System.Console.WriteLine("mqtt connected");
         return mqtt;
@@ -161,17 +242,18 @@ class Program
             var topic = format_prefixed_topic(name, attr);
             object attrValue = "_";
 
-            switch(attr) {
-                case "temperature": 
+            switch (attr)
+            {
+                case "temperature":
                     attrValue = device.MiTemp.Temperature;
                     break;
-                case "humidity": 
+                case "humidity":
                     attrValue = device.MiTemp.Humidity;
                     break;
-                case "battery": 
+                case "battery":
                     attrValue = device.MiTemp.BatteryPercent;
                     break;
-                default: 
+                default:
                     break;
             }
 
@@ -210,11 +292,6 @@ class Program
             //Console.WriteLine(JsonConvert.SerializeObject(eventArgs));
             //Console.WriteLine($"ADV data: {dataString}");
             //Console.WriteLine($"ADV manufacturer data: {manufacturerDataString}");
-        };
-        watcher.Stopped += (w, e) =>
-        {
-            System.Console.WriteLine("WATCHER IS DEAD:");
-            System.Console.WriteLine(e.Error);
         };
 
         return watcher;
